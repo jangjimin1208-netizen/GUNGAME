@@ -2,17 +2,13 @@ body {
   margin: 0;
   overflow: hidden;
   background: black;
-  color: white;
-  font-family: Arial, sans-serif;
 }
 
-#gameCanvas {
-  display: block;
-}
-
-#score {
-  position: absolute;
+#ui {
+  position: fixed;
   top: 10px;
   left: 10px;
-  font-size: 22px;
+  color: white;
+  font-size: 18px;
+  font-family: Arial;
 }
