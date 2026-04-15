@@ -5,63 +5,84 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let enemies = [];
-let allies = [];
 let bullets = [];
 let items = [];
 
 let score = 0;
 let lives = 3;
-let doubleScore = false;
+
 let gameStarted = false;
 
 let enemySpawnRate = 2000;
+let nextAmmoScore = 2000;
+
+const maxBullets = 30;
+let bulletCount = 30;
 
 const player = {
   x: canvas.width / 2,
   y: canvas.height / 2
 };
 
-// 📜 시작 화면
-function drawStartScreen() {
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+let keys = {};
 
-  ctx.fillStyle = "white";
-  ctx.textAlign = "center";
+// ================= INPUT =================
+window.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+});
 
-  ctx.font = "40px Arial";
-  ctx.fillText("🔫 슈팅 게임", canvas.width / 2, canvas.height / 2 - 100);
+window.addEventListener("keyup", e => {
+  keys[e.key.toLowerCase()] = false;
+});
 
-  ctx.font = "18px Arial";
-  ctx.fillText("🔴 적 = +점수 / 닿으면 -생명", canvas.width / 2, canvas.height / 2 - 40);
-  ctx.fillText("⚪ 아군 = 쏘면 -100점", canvas.width / 2, canvas.height / 2 - 10);
-  ctx.fillText("💖 하트 = 쏴서 맞추면 생명 +1", canvas.width / 2, canvas.height / 2 + 20);
-  ctx.fillText("⭐ 별 = 쏴서 맞추면 10초 점수 2배", canvas.width / 2, canvas.height / 2 + 50);
-
-  ctx.fillText("클릭하면 시작!", canvas.width / 2, canvas.height / 2 + 120);
-}
-
-// 시작
-canvas.addEventListener("click", (e) => {
+// ================= START =================
+canvas.addEventListener("click", e => {
   if (!gameStarted) {
     gameStarted = true;
     startSpawning();
     return;
   }
 
+  if (bulletCount <= 0) return;
+
   const dx = e.clientX - player.x;
   const dy = e.clientY - player.y;
+  const angle = Math.atan2(dy, dx);
 
-  bullets.push({ x: player.x, y: player.y, dx, dy });
+  bullets.push({
+    x: player.x,
+    y: player.y,
+    dx,
+    dy,
+    angle
+  });
+
+  bulletCount--;
+  updateUI();
 });
 
-// UI
+// ================= UI =================
 function updateUI() {
-  document.getElementById("score").textContent =
-    "점수: " + score + " ❤️ " + lives;
+  document.getElementById("ui").textContent =
+    "점수: " + score +
+    " ❤️ " + lives +
+    " 🔫 " + bulletCount;
 }
 
-// 적 생성
+// ================= HELPERS =================
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function move(obj, speed = 1.5) {
+  const dx = player.x - obj.x;
+  const dy = player.y - obj.y;
+  const d = Math.hypot(dx, dy);
+
+  obj.x += (dx / d) * speed;
+  obj.y += (dy / d) * speed;
+}
+
 function randomEdge() {
   let x, y;
   const side = Math.floor(Math.random() * 4);
@@ -74,39 +95,40 @@ function randomEdge() {
   return { x, y, size: 20, speed: 1.5 };
 }
 
-// 거리
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function spawnItemNearPlayer() {
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 150 + Math.random() * 100;
+
+  const x = player.x + Math.cos(angle) * distance;
+  const y = player.y + Math.sin(angle) * distance;
+
+  return {
+    x: Math.max(0, Math.min(canvas.width, x)),
+    y: Math.max(0, Math.min(canvas.height, y)),
+    type: "ammo"
+  };
 }
 
-// 이동
-function move(obj, speed = 1.5) {
-  const dx = player.x - obj.x;
-  const dy = player.y - obj.y;
-  const d = Math.hypot(dx, dy);
-
-  obj.x += (dx / d) * speed;
-  obj.y += (dy / d) * speed;
-}
-
-// 스폰
+// ================= SPAWN =================
 function startSpawning() {
-  setInterval(() => enemies.push(randomEdge()), enemySpawnRate);
-  setInterval(() => allies.push(randomEdge()), 3000);
-
   setInterval(() => {
-    const type = Math.random() < 0.5 ? "heart" : "star";
-    items.push({ ...randomEdge(), type });
-  }, 4000);
-
-  setInterval(() => {
-    if (enemySpawnRate > 500) enemySpawnRate -= 200;
-  }, 5000);
+    enemies.push(randomEdge());
+  }, enemySpawnRate);
 }
 
-// 업데이트
+// ================= UPDATE =================
 function update() {
   if (!gameStarted) return;
+
+  const speed = 4;
+
+  if (keys["w"] || keys["arrowup"]) player.y -= speed;
+  if (keys["s"] || keys["arrowdown"]) player.y += speed;
+  if (keys["a"] || keys["arrowleft"]) player.x -= speed;
+  if (keys["d"] || keys["arrowright"]) player.x += speed;
+
+  player.x = Math.max(0, Math.min(canvas.width, player.x));
+  player.y = Math.max(0, Math.min(canvas.height, player.y));
 
   bullets.forEach(b => {
     b.x += b.dx * 0.05;
@@ -114,9 +136,7 @@ function update() {
   });
 
   enemies.forEach(e => move(e, e.speed));
-  allies.forEach(a => move(a, a.speed));
 
-  // 🔴 적 닿으면 -1
   enemies = enemies.filter(e => {
     if (dist(e, player) < 20) {
       lives--;
@@ -130,17 +150,11 @@ function update() {
     return true;
   });
 
-  // ⚪ 아군 닿으면 삭제
-  allies = allies.filter(a => dist(a, player) > 20);
-
-  // 💥 총알 충돌 (적 / 아군 / 아이템 분리 처리)
-
-  // 🔴 적
   enemies = enemies.filter(enemy => {
     for (let i = 0; i < bullets.length; i++) {
       if (dist(enemy, bullets[i]) < enemy.size) {
-        score += doubleScore ? 200 : 100;
         bullets.splice(i, 1);
+        score += 100;
         updateUI();
         return false;
       }
@@ -148,32 +162,18 @@ function update() {
     return true;
   });
 
-  // ⚪ 아군
-  allies = allies.filter(ally => {
-    for (let i = 0; i < bullets.length; i++) {
-      if (dist(ally, bullets[i]) < ally.size) {
-        score -= 100;
-        bullets.splice(i, 1);
-        updateUI();
-        return false;
-      }
-    }
-    return true;
-  });
+  if (score >= nextAmmoScore) {
+    items.push(spawnItemNearPlayer());
+    nextAmmoScore += 2000;
+  }
 
-  // 💖⭐ 아이템 (핵심 수정!)
   items = items.filter(item => {
     for (let i = 0; i < bullets.length; i++) {
       if (dist(item, bullets[i]) < 15) {
         bullets.splice(i, 1);
 
-        if (item.type === "heart") {
-          lives++;
-        }
-
-        if (item.type === "star") {
-          doubleScore = true;
-          setTimeout(() => doubleScore = false, 10000);
+        if (item.type === "ammo") {
+          bulletCount = maxBullets;
         }
 
         updateUI();
@@ -184,10 +184,64 @@ function update() {
   });
 }
 
-// 그리기
+// ================= DRAW =================
+function drawPerson(x, y, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+
+  ctx.beginPath();
+  ctx.arc(x, y - 20, 6, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x, y - 14);
+  ctx.lineTo(x, y + 10);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y - 5);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + 10, y - 5);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x, y + 10);
+  ctx.lineTo(x - 8, y + 20);
+  ctx.lineTo(x + 8, y + 20);
+  ctx.stroke();
+}
+
+// 🔥 현실적인 총알
+function drawBullet(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.angle);
+
+  // 탄환 몸체 (금속 느낌)
+  ctx.fillStyle = "#c0c0c0";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 탄두
+  ctx.fillStyle = "#ffd700";
+  ctx.beginPath();
+  ctx.arc(8, 0, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawAmmo(x, y) {
+  ctx.fillStyle = "cyan";
+  ctx.fillRect(x - 6, y - 3, 12, 6);
+}
+
+// ================= DRAW LOOP =================
 function draw() {
   if (!gameStarted) {
-    drawStartScreen();
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
   }
 
@@ -195,49 +249,16 @@ function draw() {
 
   drawPerson(player.x, player.y, "blue");
 
-  bullets.forEach(b => {
-    ctx.fillStyle = "yellow";
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  bullets.forEach(b => drawBullet(b));
 
   enemies.forEach(e => drawPerson(e.x, e.y, "red"));
-  allies.forEach(a => drawPerson(a.x, a.y, "white"));
 
   items.forEach(item => {
-    if (item.type === "heart") drawHeart(item.x, item.y);
-    else drawStar(item.x, item.y);
+    if (item.type === "ammo") drawAmmo(item.x, item.y);
   });
 }
 
-// 사람
-function drawPerson(x, y, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x, y - 15, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(x - 5, y - 10, 10, 20);
-}
-
-// 하트
-function drawHeart(x, y) {
-  ctx.fillStyle = "pink";
-  ctx.beginPath();
-  ctx.arc(x - 5, y, 5, 0, Math.PI, true);
-  ctx.arc(x + 5, y, 5, 0, Math.PI, true);
-  ctx.fill();
-}
-
-// 별
-function drawStar(x, y) {
-  ctx.fillStyle = "yellow";
-  ctx.beginPath();
-  ctx.arc(x, y, 6, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// 루프
+// ================= LOOP =================
 function gameLoop() {
   update();
   draw();
